@@ -32,7 +32,7 @@ jobs:
 
     - name: Accept Android SDK Licenses
       run: |
-        yes | sdkmanager --licenses || true
+        yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
     - name: Build Web Application
       run: npm run build
