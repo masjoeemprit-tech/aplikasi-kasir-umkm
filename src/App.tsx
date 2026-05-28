@@ -10,6 +10,7 @@ import {
   X, Percent, Camera, Download, RefreshCw, LogOut, Database, 
   Calendar, Wifi, QrCode, FileText, ShoppingCart, Info, Lock
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { Product, Category, Discount, StoreSettings, Transaction, CartItem } from './types';
 
 // ==========================================
@@ -172,8 +173,9 @@ export default function App() {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraVideoAvailable, setCameraVideoAvailable] = useState(false);
   const [simulatedScannerActive, setSimulatedScannerActive] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scanTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const lastScannedCodeRef = useRef<string>('');
+  const lastScannedTimeRef = useRef<number>(0);
 
   // Notification state
   const [showBeep, setShowBeep] = useState(false);
@@ -555,50 +557,63 @@ export default function App() {
     } else {
       setIsCameraActive(true);
       setSimulatedScannerActive(false);
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "environment" } 
-        });
-        setCameraVideoAvailable(true);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
+      
+      // Delay slightly to ensure "#qr-reader" render is complete in the JSX
+      setTimeout(async () => {
+        try {
+          const html5QrCode = new Html5Qrcode("qr-reader");
+          html5QrCodeRef.current = html5QrCode;
+          
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            {
+              fps: 10,
+              qrbox: { width: 250, height: 150 }
+            },
+            (decodedText) => {
+              const now = Date.now();
+              // Throttles same code for 2.5s, no throttle for different barcodes
+              if (decodedText === lastScannedCodeRef.current && now - lastScannedTimeRef.current < 2500) {
+                return;
+              }
+              lastScannedCodeRef.current = decodedText;
+              lastScannedTimeRef.current = now;
+              handleBarcodeScannedSuccessfully(decodedText);
+            },
+            (errorMessage) => {
+              // Ignore scanning frame errors
+            }
+          );
+          setCameraVideoAvailable(true);
+        } catch (err) {
+          console.warn("Camera media forbidden or not sandbox compatible:", err);
+          setCameraVideoAvailable(false);
+          setSimulatedScannerActive(true);
         }
-        
-        // Setup simple barcode scanning decoder simulation loop
-        // It acts as a real detector with mock frames periodically
-        scanTimerRef.current = setInterval(() => {
-          // Pointless decoder simulation: let's pick a random product occasionally
-          // unless user points to the onscreen simulated targets.
-        }, 3000);
-
-      } catch (err) {
-        console.warn("Camera media forbidden or not sandbox compatible:", err);
-        setCameraVideoAvailable(false);
-        // Fall back to active simulated scan panel
-        setSimulatedScannerActive(true);
-      }
+      }, 300);
     }
   };
 
-  const stopCamera = () => {
+  const stopCamera = async () => {
     setIsCameraActive(false);
     setCameraVideoAvailable(false);
     setSimulatedScannerActive(false);
-    if (scanTimerRef.current) {
-      clearInterval(scanTimerRef.current);
-      scanTimerRef.current = null;
-    }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
+    
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+      } catch (err) {
+        console.warn("Failed to stop html5QrCode scanner stream gracefully:", err);
+      }
+      html5QrCodeRef.current = null;
     }
   };
 
   useEffect(() => {
     return () => {
-      if (scanTimerRef.current) clearInterval(scanTimerRef.current);
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().catch(err => console.warn(err));
+      }
     };
   }, []);
 
@@ -1360,7 +1375,7 @@ export default function App() {
 
                     {/* True Video element fallback wrapper */}
                     <div className="w-full h-44 bg-black rounded-lg overflow-hidden flex flex-col items-center justify-center border border-white/15 relative">
-                      <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline></video>
+                      <div id="qr-reader" className="w-full h-full [&_video]:object-cover [&_video]:w-full [&_video]:h-full [&_a]:hidden [&_span]:hidden"></div>
 
                       {/* Visual Reticle crosshair */}
                       <div className="absolute inset-x-8 inset-y-12 border-2 border-dashed border-green-500 rounded-lg pointer-events-none opacity-80 flex items-center justify-center">
@@ -1368,10 +1383,12 @@ export default function App() {
                       </div>
 
                       {/* Fallback instruction triggers in iframe sandbox */}
-                      <div className="absolute bottom-2 left-2 right-2 bg-black/75 p-1.5 rounded text-[10px] text-gray-300 text-center flex items-center justify-center gap-1.5">
-                        <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                        <span>Kamera dibatasi sandbox? Pakai simulator pintas di bawah ini:</span>
-                      </div>
+                      {!cameraVideoAvailable && (
+                        <div className="absolute bottom-2 left-2 right-2 bg-black/75 p-1.5 rounded text-[10px] text-gray-300 text-center flex items-center justify-center gap-1.5">
+                          <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                          <span>Kamera dibatasi sandbox? Pakai simulator pintas di bawah ini:</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* SIMULATED BARCODE SCAN BUTTONS FOR CLIENT-SIDE CONSTRAINTS TESTING */}
@@ -1415,7 +1432,7 @@ export default function App() {
                 </div>
 
                 {/* 1.2 MAIN RETAIL PRODUCT GRID LIST */}
-                <div className="flex-1 overflow-y-auto pr-1 min-h-0">
+                <div className={`flex-1 overflow-y-auto scrollbar-thin overscroll-behavior-contain touch-pan-y pr-1 min-h-0 ${isCameraActive ? 'max-h-[35vh]' : 'max-h-[62vh]'} md:max-h-none`}>
                   {filteredProducts.length === 0 ? (
                     <div className="h-44 flex flex-col items-center justify-center text-gray-500 bg-[#16191E] rounded-2xl border border-white/5">
                       <Barcode className="w-10 h-10 mb-2 opacity-30" />
@@ -1719,7 +1736,7 @@ export default function App() {
 
           {/* 2. VIEW TAB: INVENTORY / MANAGEMEN GUDANG */}
           {activeTab === 'inventory' && (
-            <div className="h-full flex flex-col gap-4 overflow-hidden">
+            <div className="h-full flex flex-col gap-4 overflow-y-auto lg:overflow-hidden pr-0.5">
               
               {/* Top controls and action triggers */}
               <div className="flex justify-between items-center shrink-0 flex-wrap gap-2">
@@ -1765,10 +1782,10 @@ export default function App() {
               </div>
 
               {/* Sub-Tabs Grid layout: 2 columns split */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden min-h-0">
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:overflow-hidden lg:min-h-0 pb-16 lg:pb-0">
                 
                 {/* Column Left (2 cols): Product list Table */}
-                <div className="lg:col-span-2 bg-[#16191E] border border-white/5 rounded-2xl flex flex-col overflow-hidden">
+                <div className="lg:col-span-2 bg-[#16191E] border border-white/5 rounded-2xl flex flex-col overflow-hidden h-[450px] lg:h-full shrink-0">
                   <div className="p-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between flex-wrap gap-2">
                     <h3 className="text-sm font-semibold text-white">Daftar Inventaris Produk</h3>
                     <div className="w-60 flex items-center bg-[#0F1115] border border-white/10 rounded px-2 py-1 text-xs text-gray-300">
@@ -1836,7 +1853,7 @@ export default function App() {
                 </div>
 
                 {/* Column Right (1 col): Current Promotions & Active Discounts */}
-                <div className="flex flex-col gap-4 overflow-hidden min-h-0">
+                <div className="flex flex-col gap-4 lg:overflow-hidden lg:min-h-0 h-[500px] lg:h-full shrink-0">
                   
                   {/* Category manager helper list */}
                   <div className="bg-[#16191E] border border-white/5 rounded-2xl p-4 flex flex-col min-h-[140px] shrink-0">
@@ -1966,7 +1983,7 @@ export default function App() {
 
           {/* 3. VIEW TAB: SALES REPORTS / LAPORAN */}
           {activeTab === 'reports' && (
-            <div className="h-full flex flex-col gap-4 overflow-hidden">
+            <div className="h-full flex flex-col gap-4 overflow-y-auto lg:overflow-hidden pr-0.5">
               
               {/* Reports Dashboard top stats panels */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
@@ -2014,10 +2031,10 @@ export default function App() {
               </div>
 
               {/* Exports actions section & layout charts */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden min-h-0">
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:overflow-hidden lg:min-h-0 pb-16 lg:pb-0">
                 
                 {/* Visual Sales List Table left (2 columns) */}
-                <div className="lg:col-span-2 bg-[#16191E] border border-white/5 rounded-2xl flex flex-col overflow-hidden">
+                <div className="lg:col-span-2 bg-[#16191E] border border-white/5 rounded-2xl flex flex-col overflow-hidden h-[450px] lg:h-full shrink-0">
                   <div className="p-4 border-b border-white/5 bg-white/[0.02] flex justify-between items-center flex-wrap gap-2">
                     <div>
                       <h3 className="text-xs font-bold text-white uppercase tracking-wider">Rekapitulasi Transaksi Terakhir</h3>
@@ -2096,7 +2113,7 @@ export default function App() {
                 </div>
 
                 {/* SQLite Logs Terminal & Analytical Summary (1 col) */}
-                <div className="flex flex-col gap-4 overflow-hidden min-h-0">
+                <div className="flex flex-col gap-4 lg:overflow-hidden lg:min-h-0 h-[480px] lg:h-full shrink-0">
                   
                   {/* Top selling product list rekap */}
                   <div className="bg-[#16191E] border border-white/5 rounded-2xl p-4 flex-1 flex flex-col overflow-hidden">
@@ -2150,7 +2167,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="flex-1 bg-black/60 rounded-lg p-2 overflow-y-auto font-mono text-[9px] text-green-400 space-y-1">
+                    <div className="flex-1 bg-black/60 rounded-lg p-2 overflow-y-auto scrollbar-thin overscroll-behavior-contain touch-pan-y font-mono text-[9px] text-green-400 space-y-1">
                       {sqlliteLogs.length === 0 ? (
                         <p className="text-gray-600">SQLite is vacuumed & ready.</p>
                       ) : (
