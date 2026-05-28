@@ -51,8 +51,8 @@ jobs:
     - name: Build Android Debug APK with Gradle
       working-directory: android
       run: |
-        # Download a clean binary gradle-wrapper.jar from Maven Central to bypass Git LFS pointer issue
-        curl -sLo gradle/wrapper/gradle-wrapper.jar https://repo1.maven.org/maven2/org/gradle/gradle-wrapper/8.10.2/gradle-wrapper-8.10.2.jar
+        # Generate pristine gradle-wrapper.jar and gradlew files using preinstalled system Gradle
+        gradle wrapper --gradle-version 8.10.2
         chmod +x gradlew
         ./gradlew assembleDebug
 
