@@ -51,21 +51,10 @@ jobs:
     - name: Build Android Debug APK with Gradle
       working-directory: android
       run: |
-        # Generate pristine gradle-wrapper.jar and gradlew files using preinstalled system Gradle in a clean temp directory
-        mkdir -p /tmp/wrapper-setup
-        cd /tmp/wrapper-setup
-        if gradle wrapper --gradle-version 8.10.2; then
-          echo "Successfully generated wrapper via system Gradle in clean directory"
-          cd -
-          cp /tmp/wrapper-setup/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.jar
-          cp /tmp/wrapper-setup/gradlew gradlew
-          cp /tmp/wrapper-setup/gradle/wrapper/gradle-wrapper.properties gradle/wrapper/gradle-wrapper.properties
-        else
-          echo "System gradle failed, trying direct copy from system installation"
-          cd -
-          # Alternative system fallback
-          find /opt/hostedtoolcache/ /usr/share/gradle/ -name "gradle-wrapper-*.jar" -o -name "gradle-wrapper.jar" 2>/dev/null | head -n 1 | xargs -I {} cp {} gradle/wrapper/gradle-wrapper.jar
-        fi
+        # Delete any corrupted or Git LFS pointer gradle-wrapper.jar first
+        rm -f gradle/wrapper/gradle-wrapper.jar
+        # Generate pristine gradle-wrapper.jar and gradlew files using preinstalled system Gradle
+        gradle wrapper --gradle-version 8.10.2
         chmod +x gradlew
         ./gradlew assembleDebug
 
