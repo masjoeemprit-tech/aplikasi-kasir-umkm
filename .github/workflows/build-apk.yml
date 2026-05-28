@@ -51,6 +51,8 @@ jobs:
     - name: Build Android Debug APK with Gradle
       working-directory: android
       run: |
+        # Download a clean gradle-wrapper.jar to replace any corrupted or CRLF-converted version
+        curl -sLo gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.10.2/gradle/wrapper/gradle-wrapper.jar
         chmod +x gradlew
         ./gradlew assembleDebug
 

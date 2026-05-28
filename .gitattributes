@@ -1,0 +1,2 @@
+# Treat all .jar files as binary to prevent git from corrupting them with line ending conversion (CRLF/LF)
+*.jar binary
