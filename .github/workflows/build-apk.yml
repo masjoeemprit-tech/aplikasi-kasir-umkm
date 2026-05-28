@@ -56,7 +56,7 @@ jobs:
         # Generate pristine gradle-wrapper.jar and gradlew files using preinstalled system Gradle
         gradle wrapper --gradle-version 8.10.2
         chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace
+        ./gradlew assembleDebug --no-daemon --max-workers=2 --stacktrace
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
