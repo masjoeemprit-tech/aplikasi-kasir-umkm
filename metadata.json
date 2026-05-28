@@ -1,0 +1,10 @@
+{
+  "name": "Kasir Offline",
+  "description": "Aplikasi Kasir (POS) 100% Offline dengan database lokal, cetak struk thermal, scan barcode real-time, dan laporan penjualan.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
